@@ -3,8 +3,10 @@
 require 'rubygems'
 require 'halo-api-lib'
 
+$outputFile = nil
+
 class TestArgs
-  attr_accessor :base_url, :key_id, :key_secret, :cmd, :arg
+  attr_accessor :base_url, :key_id, :key_secret, :cmd, :arg, :include_events
   attr_accessor :enable_sca, :enable_svm, :enable_user_access, :starting_date
 
   def initialize()
@@ -17,6 +19,7 @@ class TestArgs
     @enable_user_access = false
     @cmd = nil
     @starting_date = nil
+    @include_events = false
   end
 
   def parse(args)
@@ -36,6 +39,9 @@ class TestArgs
         @base_url = arg.split('=')[1]
       elsif (arg.start_with?("starting=") || arg.start_with?("--starting="))
         @starting_date = arg.split('=')[1]
+      elsif (arg.start_with?("output=") || arg.start_with?("--output="))
+        filename = arg.split('=')[1]
+        $outputFile = File.open(filename,'w')
       elsif (arg == "localca") || (arg == "--localca")
         ENV['SSL_CERT_FILE'] = File.expand_path(File.dirname(__FILE__)) + "/certs/cacert.pem"
       elsif (arg == "scan=sca") || (arg == "--scan=sca")
@@ -53,10 +59,16 @@ class TestArgs
         @enable_svm = false
         @enable_user_access = true
         @cmd = "issues"
+      elsif (arg == "scan=sca-with-events") || (arg == "--scan=sca-with-events")
+        @enable_sca = true
+        @enable_svm = false
+        @enable_user_access = false
+        @include_events = true
+        @cmd = "issues"
       elsif (arg == "-h") || (arg == "-?")
         @cmd = nil
       else
-        puts "Unrecognized argument: #{arg}"
+        $stderr.puts "Unrecognized argument: #{arg}"
         allOK = false
       end
     end
@@ -72,7 +84,7 @@ class TestArgs
 
   def readAuthFile(filename)
     if not File.exists? filename
-      puts "Auth file #{filename} does not exist"
+      $stderr.puts "Auth file #{filename} does not exist"
       return false
     end
     File.readlines(filename).each do |line|
@@ -82,20 +94,20 @@ class TestArgs
       elsif key == "secret"
         @key_secret = value
       else
-        puts "Unexpected key (#{key}) in auth file #{filename}"
+        $stderr.puts "Unexpected key (#{key}) in auth file #{filename}"
       end
     end
     if @verbose
       puts "AuthFile: id=#{@key_id} secret=#{@key_secret}"
     end
     if @key_id == nil && @key_secret == nil
-      puts "missing both key ID and secret in auth file"
+      $stderr.puts "missing both key ID and secret in auth file"
       false
     elsif @key_id == nil
-      puts "missing key ID in auth file"
+      $stderr.puts "missing key ID in auth file"
       false
     elsif @key_secret == nil
-      puts "missing key secret in auth file"
+      $stderr.puts "missing key secret in auth file"
       false
     else
       true
@@ -103,18 +115,20 @@ class TestArgs
   end
 
   def usage()
-    puts "Usage: #{File.basename($0)} [auth-flag] [url-flag] [cmd-flag] [options]"
-    puts "  where auth-flag can be one of:"
-    puts "    --auth=<id>,<secret>\tUse provided credentials"
-    puts "  where url-flag can be one or more of:"
-    puts "    --url=<url>\t\tOverride the base URL to connect to"
-    puts "    --localca\t\tUse local SSL cert file (needed on Windows)"
-    puts "  where cmd-flag can be one of:"
-    puts "    --scan=svm\t\tDump the SVM issues in XML format"
-    puts "    --scan=sca\t\tDump the SCA issues in XML format"
-    puts "    --user-access\tShow which users can access which servers in XML"
-    puts "  where options can be one or more of:"
-    puts "    --starting=<date>\tStart fetching events from ISO-8601 date/time"
+    $stderr.puts "Usage: #{File.basename($0)} [auth-flag] [url-flag] [cmd-flag] [options]"
+    $stderr.puts "  where auth-flag can be one of:"
+    $stderr.puts "    --auth=<id>,<secret>\tUse provided credentials"
+    $stderr.puts "  where url-flag can be one or more of:"
+    $stderr.puts "    --url=<url>\t\t\tOverride the base URL to connect to"
+    $stderr.puts "    --localca\t\t\tUse local SSL cert file (needed on Windows)"
+    $stderr.puts "  where cmd-flag can be one of:"
+    $stderr.puts "    --scan=svm\t\t\tDump the SVM issues in XML format"
+    $stderr.puts "    --scan=sca\t\t\tDump the SCA issues in XML format"
+    $stderr.puts "    --scan=sca-with-events\tDump the SCA issues (including scan events) in XML format"
+    $stderr.puts "    --user-access\t\tShow which users can access which servers in XML"
+    $stderr.puts "  where options can be one or more of:"
+    $stderr.puts "    --starting=<date>\t\tStart fetching events from ISO-8601 date/time"
+    $stderr.puts "    --output=<file>\t\tWrite XML to named file"
   end
 end
 
@@ -127,39 +141,47 @@ def dumpTag(tagName,value)
   s
 end
 
+def writeOutput(s)
+  if ($outputFile != nil)
+    $outputFile.puts s
+  else
+    puts s
+  end
+end
+
 def dumpServer(prefix,server,glist)
-  puts "#{prefix}<server>"
-  puts "#{prefix}  <hostname>#{server.hostname}</hostname>"
-  puts "#{prefix}  <id>#{server.id}</id>"
-  puts "#{prefix}  <connecting_ip_address>#{server.connecting_addr}</connecting_ip_address>"
-  puts "#{prefix}  #{findGroupForServer(server,glist)}"
-  puts "#{prefix}</server>"
+  writeOutput "#{prefix}<server>"
+  writeOutput "#{prefix}  <hostname>#{server.hostname}</hostname>"
+  writeOutput "#{prefix}  <id>#{server.id}</id>"
+  writeOutput "#{prefix}  <connecting_ip_address>#{server.connecting_addr}</connecting_ip_address>"
+  writeOutput "#{prefix}  #{findGroupForServer(server,glist)}"
+  writeOutput "#{prefix}</server>"
 end
 
 def dumpSvm(server,svm,glist,eventMap)
   if ((svm != nil) && (svm.findings != nil))
     svm.findings.each do |finding|
-      puts "  <finding>"
-      puts "    <id>#{server.id + '-' + finding.package_name}</id>"
-      puts "    <finding_type>svm</finding_type>"
+      writeOutput "  <finding>"
+      writeOutput "    <id>#{server.id + '-' + finding.package_name}</id>"
+      writeOutput "    <finding_type>svm</finding_type>"
       dumpServer("    ",server,glist)
-      puts "    <status>#{finding.status}</status>"
-      puts "    <package_name>#{finding.package_name}</package_name>"
-      puts "    <package_version>#{finding.package_version}</package_version>"
-      puts "    <critical>#{finding.critical}</critical>"
+      writeOutput "    <status>#{finding.status}</status>"
+      writeOutput "    <package_name>#{finding.package_name}</package_name>"
+      writeOutput "    <package_version>#{finding.package_version}</package_version>"
+      writeOutput "    <critical>#{finding.critical}</critical>"
       if (finding.cve_entries != nil)
-        puts "    <cve_entries>"
+        writeOutput "    <cve_entries>"
         finding.cve_entries.each do |cve|
-          puts "      <cve_entry>"
-          puts "        <cve_id>#{cve.cve_entry}</cve_id>"
-          puts "        <suppressed>#{cve.suppressed}</suppressed>"
-          puts "      </cve_entry>"
+          writeOutput "      <cve_entry>"
+          writeOutput "        <cve_id>#{cve.cve_entry}</cve_id>"
+          writeOutput "        <suppressed>#{cve.suppressed}</suppressed>"
+          writeOutput "      </cve_entry>"
         end
-        puts "    </cve_entries>"
+        writeOutput "    </cve_entries>"
       else
-        puts "    <cve_entries/>"
+        writeOutput "    <cve_entries/>"
       end
-      puts "  </finding>"
+      writeOutput "  </finding>"
     end
   end
 end
@@ -167,40 +189,40 @@ end
 def dumpSca(server,sca,glist,eventMap)
   if ((sca != nil) && (sca.findings != nil))
     sca.findings.each do |finding|
-      puts "  <finding>"
-      puts "    <id>#{server.id + '-' + finding.rule_name}</id>"
-      puts "    <finding_type>sca</finding_type>"
+      writeOutput "  <finding>"
+      writeOutput "    <id>#{server.id + '-' + finding.rule_name}</id>"
+      writeOutput "    <finding_type>sca</finding_type>"
       dumpServer("    ",server,glist)
-      puts "    <rule_name>#{finding.rule_name}</rule_name>"
-      puts "    <critical>#{finding.critical}</critical>"
-      puts "    <status>#{finding.status}</status>"
+      writeOutput "    <rule_name>#{finding.rule_name}</rule_name>"
+      writeOutput "    <critical>#{finding.critical}</critical>"
+      writeOutput "    <status>#{finding.status}</status>"
       if (finding.details != nil)
         finding.details.each do |detail|
-          puts "    <detail>"
-          puts "      " + dumpTag("type",detail.type)
-          puts "      " + dumpTag("target",detail.target)
-          puts "      " + dumpTag("actual",detail.actual)
-          puts "      " + dumpTag("expected",detail.expected)
-          puts "      " + dumpTag("status",detail.status)
-          puts "      " + dumpTag("scan_status",detail.scan_status)
-          puts "      " + dumpTag("config_key",detail.config_key)
-          puts "      " + dumpTag("config_key_value_delimiter",detail.config_key_value_delimiter)
-          puts "    </detail>"
+          writeOutput "    <detail>"
+          writeOutput "      " + dumpTag("type",detail.type)
+          writeOutput "      " + dumpTag("target",detail.target)
+          writeOutput "      " + dumpTag("actual",detail.actual)
+          writeOutput "      " + dumpTag("expected",detail.expected)
+          writeOutput "      " + dumpTag("status",detail.status)
+          writeOutput "      " + dumpTag("scan_status",detail.scan_status)
+          writeOutput "      " + dumpTag("config_key",detail.config_key)
+          writeOutput "      " + dumpTag("config_key_value_delimiter",detail.config_key_value_delimiter)
+          writeOutput "    </detail>"
         end
       end
       key = "#{server.id}\t#{finding.rule_name}"
       if (eventMap != nil) && (eventMap[key] != nil)
         evlist = eventMap[key]
         evlist.each do |event|
-          puts "    <event>"
-          puts "      " + dumpTag("name",event.name)
-          puts "      " + dumpTag("created_at",event.created_at)
-          puts "      " + dumpTag("object_name",event.object_name)
-          puts "      " + dumpTag("message",event.message) # might need to be escaped
-          puts "    </event>"
+          writeOutput "    <event>"
+          writeOutput "      " + dumpTag("name",event.name)
+          writeOutput "      " + dumpTag("created_at",event.created_at)
+          writeOutput "      " + dumpTag("object_name",event.object_name)
+          writeOutput "      " + dumpTag("message",event.message) # might need to be escaped
+          writeOutput "    </event>"
         end
       end
-      puts "  </finding>"
+      writeOutput "  </finding>"
     end
   end
 end
@@ -221,7 +243,7 @@ def sortEvents(evlist,evmap)
       if (key != nil)
         evmap[key] = [] if (evmap[key] == nil)
         evmap[key] << event
-        # puts "Event: #{event.to_s}"
+        # writeOutput "Event: #{event.to_s}"
       end
     end
   end
@@ -279,14 +301,14 @@ def dumpUserAccess(client,server_list,group_list,groupsByServerId)
   all_users = Halo::Users.all client
 
   server_list.each do |server|
-    puts "  <server>"
-    puts "    <hostname>#{server.hostname}</hostname>"
-    puts "    <id>#{server.id}</id>"
-    puts "    <platform>#{server.platform}</platform>"
-    puts "    <connecting_ip_address>#{server.connecting_addr}</connecting_ip_address>"
+    writeOutput "  <server>"
+    writeOutput "    <hostname>#{server.hostname}</hostname>"
+    writeOutput "    <id>#{server.id}</id>"
+    writeOutput "    <platform>#{server.platform}</platform>"
+    writeOutput "    <connecting_ip_address>#{server.connecting_addr}</connecting_ip_address>"
     group = groupsByServerId[server.id]
     if (group != nil)
-      puts "    <server_group>#{group.name}</server_group>"
+      writeOutput "    <server_group>#{group.name}</server_group>"
     end
     fwpID = nil
     if (server.platform == 'windows')
@@ -294,24 +316,24 @@ def dumpUserAccess(client,server_list,group_list,groupsByServerId)
     else # elsif (server.platform == 'linux')
       fwpID = group.linux_firewall_policy_id
     end
-    # puts "    <firewall-policy-id>#{fwpID}</firewall-policy-id>"
+    # writeOutput "    <firewall-policy-id>#{fwpID}</firewall-policy-id>"
     if (fwpID != nil) && (usersById[fwpID] != nil)
       if (usersById[fwpID] == :All)
-        # puts "    <all-users>"
-        puts "    <users>"
-        all_users.each { |user| puts "      <user>#{user.username}</user>" }
-        puts "    </users>"
+        # writeOutput "    <all-users>"
+        writeOutput "    <users>"
+        all_users.each { |user| writeOutput "      <user>#{user.username}</user>" }
+        writeOutput "    </users>"
       elsif (usersById[fwpID] == [])
-        puts "    <users/>"
+        writeOutput "    <users/>"
       else
-        puts "    <users>"
-        usersById[fwpID].each { |username| puts "      <user>#{username}</user>" }
-        puts "    </users>"
+        writeOutput "    <users>"
+        usersById[fwpID].each { |username| writeOutput "      <user>#{username}</user>" }
+        writeOutput "    </users>"
       end
     else
-      puts "    <users/>"
+      writeOutput "    <users/>"
     end
-    puts "  </server>"
+    writeOutput "  </server>"
   end
 end
 
@@ -357,14 +379,14 @@ begin
   end
 
   # get events so we can add them to each issue's records
-  if (cmd_line.enable_sca) # eventually add svm and other scans which may reference events
+  if (cmd_line.enable_sca && cmd_line.include_events) # eventually add svm and other scans which may reference events
     eventMap = getSortedEvents(client,cmd_line.starting_date)
   else
     eventMap = {}
   end
 
   if (cmd_line.enable_sca || cmd_line.enable_svm)
-    puts "<findings>"
+    writeOutput "<findings>"
     server_list.each do |server|
       issues = server.issues client
       if (cmd_line.enable_sca)
@@ -374,11 +396,11 @@ begin
         dumpSvm(server,issues.svm,groupsByServerId,eventMap)
       end
     end
-    puts "</findings>"
+    writeOutput "</findings>"
   elsif (cmd_line.enable_user_access)
-    puts "<servers>"
+    writeOutput "<servers>"
     dumpUserAccess(client,server_list,group_list,groupsByServerId)
-    puts "</servers>"
+    writeOutput "</servers>"
   end
 rescue Halo::ConnectionException => conn_err
   $stderr.puts "Connection Error: " + conn_err.error_descr
@@ -393,5 +415,7 @@ rescue Halo::FailedException => api_err
   $stderr.puts "           description=#{api_err.error_description}"
   $stderr.puts "           request_url=#{api_err.url}"
   $stderr.puts "           body=#{api_err.error_body}"
-  exit  
+  exit
+ensure
+  $outputFile.close() unless $outputFile == nil
 end
