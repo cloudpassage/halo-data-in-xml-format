@@ -88,13 +88,10 @@ class TestArgs
       return false
     end
     File.readlines(filename).each do |line|
-      key, value = line.chomp.split("=")
-      if key == "id"
-        @key_id = value
-      elsif key == "secret"
+      key, value = line.chomp.split("|")
+      if ((key != nil) && (value != nil) && ((@key_id == nil) || (@key_secret == nil)))
+        @key_id = key
         @key_secret = value
-      else
-        $stderr.puts "Unexpected key (#{key}) in auth file #{filename}"
       end
     end
     if @verbose
@@ -158,8 +155,8 @@ def dumpServer(prefix,server,glist)
   writeOutput "#{prefix}</server>"
 end
 
-def dumpSvm(server,svm,glist,eventMap)
-  if ((svm != nil) && (svm.findings != nil))
+def dumpSvm(server,svm,glist,eventMap,starting_date)
+  if ((svm != nil) && (svm.findings != nil) && (! ((starting_date != nil) && (svm.created_at < starting_date))))
     svm.findings.each do |finding|
       writeOutput "  <finding>"
       writeOutput "    <id>#{server.id + '-' + finding.package_name}</id>"
@@ -169,6 +166,8 @@ def dumpSvm(server,svm,glist,eventMap)
       writeOutput "    <package_name>#{finding.package_name}</package_name>"
       writeOutput "    <package_version>#{finding.package_version}</package_version>"
       writeOutput "    <critical>#{finding.critical}</critical>"
+      writeOutput "    <created_at>#{svm.created_at}</created_at>"
+      writeOutput "    <completed_at>#{svm.completed_at}</completed_at>"
       if (finding.cve_entries != nil)
         writeOutput "    <cve_entries>"
         finding.cve_entries.each do |cve|
@@ -186,8 +185,8 @@ def dumpSvm(server,svm,glist,eventMap)
   end
 end
 
-def dumpSca(server,sca,glist,eventMap)
-  if ((sca != nil) && (sca.findings != nil))
+def dumpSca(server,sca,glist,eventMap,starting_date)
+  if ((sca != nil) && (sca.findings != nil) && (! ((starting_date != nil) && (sca.created_at < starting_date))))
     sca.findings.each do |finding|
       writeOutput "  <finding>"
       writeOutput "    <id>#{server.id + '-' + finding.rule_name}</id>"
@@ -196,6 +195,8 @@ def dumpSca(server,sca,glist,eventMap)
       writeOutput "    <rule_name>#{finding.rule_name}</rule_name>"
       writeOutput "    <critical>#{finding.critical}</critical>"
       writeOutput "    <status>#{finding.status}</status>"
+      writeOutput "    <created_at>#{sca.created_at}</created_at>"
+      writeOutput "    <completed_at>#{sca.completed_at}</completed_at>"
       if (finding.details != nil)
         finding.details.each do |detail|
           writeOutput "    <detail>"
@@ -388,12 +389,12 @@ begin
   if (cmd_line.enable_sca || cmd_line.enable_svm)
     writeOutput "<findings>"
     server_list.each do |server|
-      issues = server.issues client
+      issues = server.detailed_issues client
       if (cmd_line.enable_sca)
-        dumpSca(server,issues.sca,groupsByServerId,eventMap)
+        dumpSca(server,issues.sca,groupsByServerId,eventMap,cmd_line.starting_date)
       end
       if (cmd_line.enable_svm)
-        dumpSvm(server,issues.svm,groupsByServerId,eventMap)
+        dumpSvm(server,issues.svm,groupsByServerId,eventMap,cmd_line.starting_date)
       end
     end
     writeOutput "</findings>"
