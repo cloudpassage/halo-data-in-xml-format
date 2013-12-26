@@ -8,6 +8,7 @@ $outputFile = nil
 class TestArgs
   attr_accessor :base_url, :key_id, :key_secret, :cmd, :arg, :include_events
   attr_accessor :enable_sca, :enable_svm, :enable_user_access, :starting_date
+  attr_accessor :needs_usage
 
   def initialize()
     @base_url = "https://portal.cloudpassage.com/"
@@ -20,6 +21,7 @@ class TestArgs
     @cmd = nil
     @starting_date = nil
     @include_events = false
+    @needs_usage = true
   end
 
   def parse(args)
@@ -39,6 +41,15 @@ class TestArgs
         @base_url = arg.split('=')[1]
       elsif (arg.start_with?("starting=") || arg.start_with?("--starting="))
         @starting_date = arg.split('=')[1]
+        if (! verifyISO8601(@starting_date))
+          $stderr.puts("Invalid date/time specification (#{@starting_date}), see ISO-8601")
+          allOK = false
+          @needs_usage = false
+        elsif (! isInPastISO8601(@starting_date))
+          $stderr.puts("(#{@starting_date}) does not represent a date/time in the past")
+          allOK = false
+          @needs_usage = false
+        end
       elsif (arg.start_with?("output=") || arg.start_with?("--output="))
         filename = arg.split('=')[1]
         $outputFile = File.open(filename,'w')
@@ -70,6 +81,7 @@ class TestArgs
       else
         $stderr.puts "Unrecognized argument: #{arg}"
         allOK = false
+        @needs_usage = true
       end
     end
     if ! allOK
@@ -126,6 +138,64 @@ class TestArgs
     $stderr.puts "  where options can be one or more of:"
     $stderr.puts "    --starting=<date>\t\tStart fetching events from ISO-8601 date/time"
     $stderr.puts "    --output=<file>\t\tWrite XML to named file"
+  end
+
+  def checkDateString(date_str)
+    date_fields = date_str.split("-")
+    return false if (date_fields.length != 3)
+    return false if (date_fields[0].to_i < 1900) || (date_fields[0].to_i > 9999)
+    return false if (date_fields[1].to_i < 1) || (date_fields[1].to_i > 12)
+    return false if (date_fields[2].to_i < 1) || (date_fields[2].to_i > 31)
+    return true
+  end
+
+  def checkTimeString(time_str)
+    time_fields = time_str.split(":")
+    return false if (time_fields.length < 2) || (time_fields.length > 3)
+    return false if (time_fields[0].to_i < 0) || (time_fields[0].to_i > 23)
+    return false if (time_fields[1].to_i < 1) || (time_fields[1].to_i > 59)
+    if (time_fields.length == 3)
+      seconds, tz = time_fields[2].split("+")
+      if (tz != nil)
+        return false if ((tz.to_i < 0) || (tz.to_i > 1159))
+        return false if ((tz.to_i % 100) > 59)
+      end
+      seconds, tz = seconds.split("-")
+      if (tz != nil)
+        return false if ((tz.to_i < 0) || (tz.to_i > 1159))
+        return false if ((tz.to_i % 100) > 59)
+      end
+      seconds = seconds.split("Z")[0]
+      whole_seconds, partial = seconds.split(".")
+      return false if (whole_seconds.to_i < 0) || (whole_seconds.to_i > 59)
+      return false if (partial.to_i < 1) || (partial.to_i > 1000000)
+    end
+    return true
+  end
+
+  def verifyISO8601(dt_str)
+    if (dt_str == nil) || (dt_str.length < 10)
+      return false
+    end
+    # use regex as first line of checking, then try to use Ruby parsing to check
+    if (/^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,6})?)?(Z|[+-]\d{4})?)?$/ =~ dt_str)
+      begin
+        date_str, time_str = dt_str.split("T")
+        return false if (! checkDateString(date_str))
+        return false if ((time_str != nil) && (! checkTimeString(time_str)))
+        return true
+      rescue ArgumentError => e
+        puts "Exception: #{e}"
+        return false
+      end
+    else
+      return false
+    end
+  end
+
+  def isInPastISO8601(dt_str)
+    now = Time.now.utc.iso8601
+    return dt_str < now
   end
 end
 
@@ -341,7 +411,7 @@ end
 cmd_line = TestArgs.new()
 cmd_line.parse(ARGV)
 if (cmd_line.cmd == nil)
-  cmd_line.usage
+  cmd_line.usage if cmd_line.needs_usage
   exit
 end
 
