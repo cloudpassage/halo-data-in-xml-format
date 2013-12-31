@@ -153,7 +153,7 @@ class TestArgs
     time_fields = time_str.split(":")
     return false if (time_fields.length < 2) || (time_fields.length > 3)
     return false if (time_fields[0].to_i < 0) || (time_fields[0].to_i > 23)
-    return false if (time_fields[1].to_i < 1) || (time_fields[1].to_i > 59)
+    return false if (time_fields[1].to_i < 0) || (time_fields[1].to_i > 59)
     if (time_fields.length == 3)
       seconds, tz = time_fields[2].split("+")
       if (tz != nil)
@@ -168,7 +168,7 @@ class TestArgs
       seconds = seconds.split("Z")[0]
       whole_seconds, partial = seconds.split(".")
       return false if (whole_seconds.to_i < 0) || (whole_seconds.to_i > 59)
-      return false if (partial.to_i < 1) || (partial.to_i > 1000000)
+      return false if (partial != nil) && ((partial.to_i < 0) || (partial.to_i > 1000000))
     end
     return true
   end
