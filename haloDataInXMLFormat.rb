@@ -84,6 +84,11 @@ class TestArgs
         @needs_usage = true
       end
     end
+    if (@starting_date != nil) && (! @include_events)
+      $stderr.puts "The --starting option is only allowed with --scan=sca-with-events"
+      allOK = false
+      @needs_usage = false
+    end
     if ! allOK
       @cmd = nil
     end
@@ -136,7 +141,7 @@ class TestArgs
     $stderr.puts "    --scan=sca-with-events\tDump the SCA issues (including scan events) in XML format"
     $stderr.puts "    --user-access\t\tShow which users can access which servers in XML"
     $stderr.puts "  where options can be one or more of:"
-    $stderr.puts "    --starting=<date>\t\tStart fetching events from ISO-8601 date/time"
+    $stderr.puts "    --starting=<date>\t\tStart fetching events from this ISO-8601 date/time"
     $stderr.puts "    --output=<file>\t\tWrite XML to named file"
   end
 
@@ -256,7 +261,7 @@ def dumpSvm(server,svm,glist,eventMap,starting_date)
 end
 
 def dumpSca(server,sca,glist,eventMap,starting_date)
-  if ((sca != nil) && (sca.findings != nil) && (! ((starting_date != nil) && (sca.created_at < starting_date))))
+  if ((sca != nil) && (sca.findings != nil))
     sca.findings.each do |finding|
       writeOutput "  <finding>"
       writeOutput "    <id>#{server.id + '-' + finding.rule_name}</id>"
