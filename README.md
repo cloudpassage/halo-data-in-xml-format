@@ -94,3 +94,8 @@ $ ./haloDataInXMLFormat –scan=sca –output=testScanData
 Since the arguments are for SCA scans, you should soon see XML-formatted scan issues being written to the output file named testScanData.
 
 Run the script a few more times, experimenting with arguments to send output to the standard output, or to produce other scan outputs.
+
+
+<!---
+#CPTAGS:community-unsupported integration api-example
+-->
