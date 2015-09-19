@@ -14,10 +14,8 @@ To get started, you must have the following privileges and software resources:
 * Access to your CloudPassage API key. Best practice is to create a new read-only key specifically for use with this script.
 * Ruby 1.9 or later. You can download Ruby from here.
 * The Data Connector script (haloDataInXMLFormat.rb) and its associated files:
-    * halo-api-lib-2.3.0.gem
+    * halo-api-lib-2.3.0.gem (install this with 'gem install halo-api-lib')
     * cacerts.pem (Required if running the connector on Windows)
-
-These files can be downloaded from: __________
 
 *Note*:  The connector script makes calls to the CloudPassage Halo API. While some of the APIs being called are available to all Halo subscribers at all levels (including Basic), others are available only to Halo users with a NetSec or Professional subscription
 
