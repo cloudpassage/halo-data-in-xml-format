@@ -96,4 +96,5 @@ Run the script a few more times, experimenting with arguments to send output to 
 
 <!---
 #CPTAGS:community-unsupported integration api-example
+#TBICON:images/ruby_icon.png
 -->
